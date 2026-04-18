@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' blob:; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; media-src blob: data: file:; connect-src blob: data: file:;" />
+  <title>last's scriber</title>
+  <link rel="icon" href="./assets/favicon.ico" type="image/x-icon" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+  <link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Title bar -->
+    <header id="titlebar">
+      <div id="tb-left">
+        <span id="app-name">last's scriber</span>
+        <span id="song-label">no song loaded</span>
+      </div>
+      <div id="tb-right">
+        <button id="btn-load" class="tbarbtn">load song</button>
+
+        <!-- Export button with dropdown -->
+        <div id="export-wrap">
+          <button id="btn-export" class="tbarbtn">export</button>
+          <div id="export-menu" class="export-menu" hidden>
+            <div class="export-section-label">save file</div>
+            <button class="export-item" data-action="save" data-fmt="srt">save as .SRT</button>
+            <button class="export-item" data-action="save" data-fmt="lrc">save as .LRC</button>
+            <button class="export-item" data-action="save" data-fmt="ass">save as .ASS</button>
+            <button class="export-item" data-action="save" data-fmt="json">save as .JSON</button>
+            <button class="export-item" data-action="save" data-fmt="txt">save as .TXT</button>
+            <div class="export-divider"></div>
+            <div class="export-section-label">copy to clipboard</div>
+            <button class="export-item" data-action="copy" data-fmt="srt">copy as .SRT</button>
+            <button class="export-item" data-action="copy" data-fmt="lrc">copy as .LRC</button>
+            <button class="export-item" data-action="copy" data-fmt="ass">copy as .ASS</button>
+            <button class="export-item" data-action="copy" data-fmt="txt">copy as .TXT</button>
+          </div>
+        </div>
+
+        <div class="tl" id="tl-min"></div>
+        <div class="tl" id="tl-max"></div>
+        <div class="tl" id="tl-close"></div>
+      </div>
+    </header>
+
+    <main id="main">
+
+      <!-- Left: waveform + lyrics list -->
+      <section id="left">
+
+        <!-- Waveform -->
+        <div id="wave-wrap">
+          <div id="wave-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <span>load a song to begin</span>
+          </div>
+          <div id="waveform-inner">
+            <div id="waveform"></div>
+          </div>
+          <div id="wave-times">
+            <span id="t-cur">0:00</span>
+            <span id="zoom-hint">ctrl+scroll to zoom</span>
+            <span id="t-tot">0:00</span>
+          </div>
+        </div>
+
+        <!-- Lyrics -->
+        <div id="lyrics-wrap">
+          <div id="lyrics-header">
+            <span>lyrics</span>
+            <span id="lyric-count">—</span>
+          </div>
+          <div id="lyrics-list">
+            <div id="lyrics-hint">press <kbd>Q</kbd> while playing to stamp a lyric</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right: playback panel -->
+      <aside id="right">
+
+        <div id="r-song">
+          <div id="r-title">No Song</div>
+          <div id="r-dur">—</div>
+        </div>
+
+        <div id="r-ts">
+          <span id="ts-val">00:00:000</span>
+        </div>
+
+        <div id="r-transport">
+          <button id="btn-prev" class="xbtn" title="Prev lyric">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4"/><rect x="5" y="4" width="2.5" height="16" rx="1"/></svg>
+          </button>
+          <button id="btn-play" class="xbtn play-btn">
+            <svg id="ico-play"  width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21"/></svg>
+            <svg id="ico-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+          </button>
+          <button id="btn-next" class="xbtn" title="Next lyric">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20"/><rect x="16.5" y="4" width="2.5" height="16" rx="1"/></svg>
+          </button>
+        </div>
+
+        <div id="r-speed">
+          <div id="speed-row">
+            <button id="btn-slower" class="speed-btn">−</button>
+            <span id="speed-val">1.00×</span>
+            <button id="btn-faster" class="speed-btn">+</button>
+          </div>
+          <div id="speed-track"><div id="speed-fill"></div></div>
+        </div>
+
+        <div id="r-keys">
+          <div class="kr"><kbd>Space</kbd><span>play / pause</span></div>
+          <div class="kr"><kbd>Q</kbd><span>stamp lyric</span></div>
+          <div class="kr"><kbd>T</kbd><span>time next lyric</span></div>
+          <div class="kr"><kbd>E</kbd><span>export</span></div>
+          <div class="kr"><kbd>+ −</kbd><span>speed</span></div>
+          <div class="kr"><kbd>Scroll</kbd><span>scrub</span></div>
+          <div class="kr"><kbd>⇧ Scroll</kbd><span>fine scrub</span></div>
+          <div class="kr"><kbd>⌃ Scroll</kbd><span>zoom</span></div>
+        </div>
+
+      </aside>
+    </main>
+  </div>
+
+  <script src="src/renderer.js"></script>
+</body>
+</html>
