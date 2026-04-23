@@ -170,23 +170,36 @@ waveWrap.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // ── Draggable scrub on waveform ───────────────────────────────────────────────
-let scrubDragging = false;
-let scrubMoved    = false;
-let scrubOriginX  = 0;
+let scrubDragging    = false;
+let scrubMoved       = false;
+let scrubOriginX     = 0;
+let scrubLastClientX = 0;   // track latest mouse X for the auto-scroll loop
+let scrubRAF         = null; // requestAnimationFrame handle for edge-scroll
+
+// Edge-scroll zone: how many px from the edge trigger auto-scroll
+const EDGE_ZONE  = 60;  // px from left/right edge
+const EDGE_SPEED = 12;  // max px per frame to scroll at the very edge
 
 waveWrap.addEventListener('mousedown', (e) => {
   if (!ws || !songDuration) return;
-  scrubDragging = true;
-  scrubMoved    = false;
-  scrubOriginX  = e.clientX;
+  scrubDragging    = true;
+  scrubMoved       = false;
+  scrubOriginX     = e.clientX;
+  scrubLastClientX = e.clientX;
 });
 
 document.addEventListener('mousemove', (e) => {
   if (!scrubDragging || !ws || !songDuration) return;
+  scrubLastClientX = e.clientX;
+
   if (!scrubMoved && Math.abs(e.clientX - scrubOriginX) < 4) return;
-  scrubMoved = true;
-  waveWrap.classList.add('dragging');
-  doScrub(e);
+
+  if (!scrubMoved) {
+    scrubMoved = true;
+    waveWrap.classList.add('dragging');
+    // Start the auto-scroll+seek loop
+    scrubRAF = requestAnimationFrame(scrubLoop);
+  }
 });
 
 document.addEventListener('mouseup', () => {
@@ -194,29 +207,78 @@ document.addEventListener('mouseup', () => {
   scrubDragging = false;
   scrubMoved    = false;
   waveWrap.classList.remove('dragging');
+  if (scrubRAF !== null) {
+    cancelAnimationFrame(scrubRAF);
+    scrubRAF = null;
+  }
 });
 
-function doScrub(e) {
-  const inner          = $('waveform-inner');
-  const rect           = inner.getBoundingClientRect();
-  const containerWidth = rect.width;
-  const visFrac        = Math.max(0, Math.min(1, (e.clientX - rect.left) / containerWidth));
-
-  if (zoomLevel <= 1) {
-    ws.seekTo(visFrac);
+/**
+ * Core scrub loop — runs every animation frame while dragging.
+ *
+ * Responsibilities:
+ *  1. Resolve the correct playhead position from the mouse X.
+ *  2. When zoomed in, auto-scroll the wrapper if the mouse is near an edge.
+ *  3. Seek WaveSurfer to the resolved position.
+ */
+function scrubLoop() {
+  if (!scrubDragging || !scrubMoved || !ws || !songDuration) {
+    scrubRAF = null;
     return;
   }
 
-  // ws.getWrapper() is WaveSurfer v7's public scrollable container.
-  // Its scrollLeft + cursor position within the visible area gives us
-  // the exact pixel in the full zoomed canvas, which we normalise to 0-1.
-  const wrapper    = ws.getWrapper?.();
-  const scrollLeft = wrapper ? wrapper.scrollLeft : 0;
-  const totalWidth = wrapper ? wrapper.scrollWidth : containerWidth * zoomLevel;
+  const wrapper = ws.getWrapper?.();
 
-  const pixelPos = scrollLeft + visFrac * containerWidth;
-  ws.seekTo(Math.max(0, Math.min(1, pixelPos / totalWidth)));
+  if (zoomLevel <= 1 || !wrapper) {
+    // ── Unzoomed path ──────────────────────────────────────────────────────
+    // Simple: fraction of the visible container = fraction of song.
+    const inner  = $('waveform-inner');
+    const rect   = inner.getBoundingClientRect();
+    const frac   = Math.max(0, Math.min(1, (scrubLastClientX - rect.left) / rect.width));
+    ws.seekTo(frac);
+  } else {
+    // ── Zoomed path ────────────────────────────────────────────────────────
+    // The wrapper IS the scrollable viewport. Its bounding rect is what we
+    // should measure against (not waveform-inner, which may differ in size).
+    const wrapRect    = wrapper.getBoundingClientRect();
+    const viewWidth   = wrapRect.width;          // visible px
+    const totalWidth  = wrapper.scrollWidth;     // full zoomed canvas px
+    const mouseInView = scrubLastClientX - wrapRect.left; // px from left edge of wrapper
+
+    // ── Auto-scroll if near edges ──────────────────────────────────────────
+    // Map how deep into the edge zone the cursor is to a scroll speed.
+    // At the very edge: EDGE_SPEED px/frame. At the zone boundary: 0.
+    let scrollDelta = 0;
+    if (mouseInView < EDGE_ZONE) {
+      // Near left edge — scroll left (negative)
+      const depth   = EDGE_ZONE - mouseInView;           // 0..EDGE_ZONE
+      scrollDelta   = -Math.round((depth / EDGE_ZONE) * EDGE_SPEED);
+    } else if (mouseInView > viewWidth - EDGE_ZONE) {
+      // Near right edge — scroll right (positive)
+      const depth   = mouseInView - (viewWidth - EDGE_ZONE); // 0..EDGE_ZONE
+      scrollDelta   = Math.round((depth / EDGE_ZONE) * EDGE_SPEED);
+    }
+
+    if (scrollDelta !== 0) {
+      wrapper.scrollLeft = Math.max(0, Math.min(totalWidth - viewWidth,
+                                                wrapper.scrollLeft + scrollDelta));
+    }
+
+    // ── Seek to the pixel the cursor is pointing at ────────────────────────
+    // Canvas pixel = scrollLeft + cursor offset within the viewport,
+    // clamped so we can't seek past the canvas edges.
+    const canvasPixel = Math.max(0, Math.min(totalWidth,
+                                             wrapper.scrollLeft + mouseInView));
+    ws.seekTo(canvasPixel / totalWidth);
+  }
+
+  scrubRAF = requestAnimationFrame(scrubLoop);
 }
+
+// One-shot click-to-seek (no drag, just a quick click)
+// WaveSurfer handles this natively via interact:true, so we only need
+// to make sure our mousedown/mouseup don't accidentally block it.
+// The scrubMoved guard already prevents seekTo from firing on plain clicks.
 
 // ── Transport ─────────────────────────────────────────────────────────────────
 $('btn-play').addEventListener('click', () => ws && ws.playPause());
